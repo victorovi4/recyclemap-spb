@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.github
+docs
+.vscode
+.claude
+.playwright-mcp
+.superpowers
+.env*
+!.env.example
+coverage
+*.log
+.DS_Store
+README.md
