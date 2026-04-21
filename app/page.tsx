@@ -1,6 +1,7 @@
 "use client";
 
 import { categories, points } from "@/lib/data";
+import Map from "@/components/Map";
 
 export default function Home() {
   return (
@@ -14,9 +15,9 @@ export default function Home() {
         <p className="text-sm text-gray-600">Точек в базе: {points.length}</p>
       </aside>
 
-      {/* Карта — заглушка */}
-      <section className="flex-1 bg-gray-100 flex items-center justify-center">
-        <p className="text-gray-500">Здесь будет карта</p>
+      {/* Карта */}
+      <section className="flex-1">
+        <Map points={points} categories={categories} />
       </section>
     </div>
   );
