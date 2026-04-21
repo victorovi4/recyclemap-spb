@@ -1,6 +1,12 @@
 "use client";
 
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  AttributionControl,
+} from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Point, Category, CategoryId } from "@/lib/types";
@@ -35,9 +41,12 @@ export default function MapInner({ points, categories }: Props) {
       zoom={11}
       className="h-full w-full"
       scrollWheelZoom
+      attributionControl={false}
     >
+      {/* Своя атрибуция без префикса "Leaflet" — оставляем только OSM (требование их лицензии) */}
+      <AttributionControl prefix={false} />
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {points.map((p) => {
