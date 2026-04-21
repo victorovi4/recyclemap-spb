@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright MCP working state — может содержать секреты сторонних сайтов из network logs
+.playwright-mcp/
+# Claude Code IDE state
+.claude/
