@@ -1,7 +1,23 @@
+"use client";
+
+import { categories, points } from "@/lib/data";
+
 export default function Home() {
   return (
-    <main className="flex flex-1 items-center justify-center">
-      <h1 className="text-3xl font-bold">RecycleMap СПб</h1>
-    </main>
+    <div className="flex flex-1 min-h-0">
+      {/* Левая колонка — фильтры (пока заглушка) */}
+      <aside className="hidden md:flex md:flex-col w-64 shrink-0 border-r border-gray-200 p-4 overflow-y-auto bg-white">
+        <h2 className="font-semibold mb-3">Фильтры</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Категории ({categories.length}) появятся здесь
+        </p>
+        <p className="text-sm text-gray-600">Точек в базе: {points.length}</p>
+      </aside>
+
+      {/* Карта — заглушка */}
+      <section className="flex-1 bg-gray-100 flex items-center justify-center">
+        <p className="text-gray-500">Здесь будет карта</p>
+      </section>
+    </div>
   );
 }
