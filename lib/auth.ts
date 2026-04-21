@@ -7,12 +7,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Yandex({
       clientId: process.env.YANDEX_CLIENT_ID,
       clientSecret: process.env.YANDEX_CLIENT_SECRET,
-      // Запрашиваем только те scope'ы, которые включены в OAuth-приложении на
-      // oauth.yandex.ru (login:email + login:info). По дефолту провайдер
-      // просит ещё login:avatar → Яндекс возвращает invalid_scope.
-      authorization: {
-        params: { scope: "login:email login:info" },
-      },
     }),
   ],
   callbacks: {
