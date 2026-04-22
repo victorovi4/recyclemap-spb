@@ -11,14 +11,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async signIn({ user }) {
-      console.log("[auth] signIn attempt:", JSON.stringify({ email: user.email, name: user.name, id: user.id }));
-      if (!user.email) {
-        console.log("[auth] deny: no email in user object");
-        return false;
-      }
-      const allowed = await isAdminEmail(user.email);
-      console.log(`[auth] isAdminEmail(${user.email}) = ${allowed}`);
-      return allowed;
+      if (!user.email) return false;
+      return await isAdminEmail(user.email);
     },
     async session({ session, token }) {
       if (token?.sub) {
