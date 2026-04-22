@@ -27,6 +27,9 @@ export type ExistingPoint = {
 
 export function pointsEqual(a: PointRow, b: PointRow): boolean {
   const scalarEqual =
+    a.id === b.id &&
+    a.source === b.source &&
+    a.source_id === b.source_id &&
     a.name === b.name &&
     a.address === b.address &&
     a.lat === b.lat &&

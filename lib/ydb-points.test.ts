@@ -39,4 +39,12 @@ describe("pointsEqual", () => {
     const b = { ...base, categoryIds: ["paper", "metal"] as any };
     expect(pointsEqual(a, b)).toBe(true);
   });
+
+  it("not equal when id differs", () => {
+    expect(pointsEqual(base, { ...base, id: "rsbor-999" })).toBe(false);
+  });
+
+  it("not equal when source_id differs", () => {
+    expect(pointsEqual(base, { ...base, source_id: "999" })).toBe(false);
+  });
 });
