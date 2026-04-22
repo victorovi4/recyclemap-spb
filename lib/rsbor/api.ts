@@ -22,6 +22,8 @@ const DEFAULT_RETRY: Required<RetryOpts> = {
   backoffMs: (attempt) => Math.pow(2, attempt) * 1000, // 1s, 2s, 4s
 };
 
+class NonRetryableError extends Error {}
+
 async function fetchJson<T>(url: string, retry: RetryOpts = {}): Promise<T> {
   const { maxAttempts, backoffMs } = { ...DEFAULT_RETRY, ...retry };
   let lastErr: unknown;
@@ -35,16 +37,17 @@ async function fetchJson<T>(url: string, retry: RetryOpts = {}): Promise<T> {
       if (res.ok) {
         const body = (await res.json()) as RSBorApiResponse<T>;
         if (!body.isSuccess) {
-          throw new Error(`API error: ${body.errors.message}`);
+          throw new NonRetryableError(`API error: ${body.errors.message}`);
         }
         return body.data;
       }
-      // 4xx — не ретраим кроме 429
+      // 4xx (except 429) — abort immediately, no retry
       if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-        throw new Error(`HTTP ${res.status} (non-retryable)`);
+        throw new NonRetryableError(`HTTP ${res.status} (non-retryable)`);
       }
       lastErr = new Error(`HTTP ${res.status}`);
     } catch (err) {
+      if (err instanceof NonRetryableError) throw err;
       lastErr = err;
     }
   }

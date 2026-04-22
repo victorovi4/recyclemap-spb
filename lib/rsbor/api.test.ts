@@ -64,4 +64,28 @@ describe("RSBor API client", () => {
     );
     expect(m).toHaveBeenCalledTimes(3);
   });
+
+  it("fetchPointDetails does NOT retry on 404 (non-retryable)", async () => {
+    const m = fetch as unknown as ReturnType<typeof vi.fn>;
+    m.mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) });
+
+    await expect(fetchPointDetails(999, { backoffMs: () => 0 })).rejects.toThrow(
+      /HTTP 404 \(non-retryable\)/,
+    );
+    expect(m).toHaveBeenCalledTimes(1); // KEY: no retry happened
+  });
+
+  it("fetchPointDetails DOES retry on 429 (rate-limit)", async () => {
+    const m = fetch as unknown as ReturnType<typeof vi.fn>;
+    m.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) });
+    m.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ isSuccess: true, data: { pointId: 7, title: "y" } }),
+    });
+
+    const result = await fetchPointDetails(7, { backoffMs: () => 0 });
+    expect(result.pointId).toBe(7);
+    expect(m).toHaveBeenCalledTimes(2);
+  });
 });
