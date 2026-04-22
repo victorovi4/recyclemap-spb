@@ -17,6 +17,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-leaflet": "^5.0.0",
+    "resend": "^6.12.2",
     "ydb-sdk": "^5.11.1"
   },
   "devDependencies": {
