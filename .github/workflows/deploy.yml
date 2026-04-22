@@ -70,5 +70,5 @@ jobs:
             YDB_DATABASE=${{ secrets.YDB_DATABASE }}
             YC_SERVICE_ACCOUNT_ID=${{ secrets.YC_SERVICE_ACCOUNT_ID }}
             IMPORT_SECRET=${{ secrets.IMPORT_SECRET }}
-            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+            RESEND_API_KEY=${{ secrets.RESEND_KEY }}
             IMPORT_REPORT_TO=${{ secrets.IMPORT_REPORT_TO }}
