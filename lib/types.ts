@@ -6,13 +6,20 @@ export type CategoryId =
   | "batteries"
   | "electronics"
   | "tetrapak"
-  | "textile";
+  | "textile"
+  | "lamps"
+  | "caps"
+  | "tires"
+  | "hazardous"
+  | "other";
 
 export type Category = {
   id: CategoryId;
   label: string;
   color: string; // HEX
-  icon: string; // emoji
+  icon: string; // emoji (fallback)
+  iconPath?: string; // SVG-путь для рендера
+  rsborId?: number; // для импорта
 };
 
 export type Point = {
