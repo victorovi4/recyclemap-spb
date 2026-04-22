@@ -1,4 +1,15 @@
-import { Driver, getCredentialsFromEnv } from "ydb-sdk";
+import { createRequire } from "node:module";
+
+// Используем createRequire вместо import, т.к. ydb-sdk помечен как
+// serverExternalPackage в next.config.ts. Turbopack ESM-обёртка ломает
+// `new Driver()` на внешнем CJS-пакете (TypeError: n.Driver is not a
+// constructor). Через createRequire получаем "сырой" CJS-экспорт.
+const nodeRequire = createRequire(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const ydb = nodeRequire("ydb-sdk") as typeof import("ydb-sdk");
+
+export const { Driver, getCredentialsFromEnv, TypedValues } = ydb;
+export type Driver = InstanceType<typeof ydb.Driver>;
 
 let driverPromise: Promise<Driver> | null = null;
 

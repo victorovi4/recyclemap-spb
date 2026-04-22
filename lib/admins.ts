@@ -1,5 +1,4 @@
-import { TypedValues } from "ydb-sdk";
-import { getDriver } from "./ydb";
+import { getDriver, TypedValues } from "./ydb";
 
 /** Проверка — есть ли этот email в whitelist-таблице admins. */
 export async function isAdminEmail(email: string): Promise<boolean> {
