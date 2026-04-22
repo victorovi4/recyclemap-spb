@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseGeom, formatSchedule, isSpbAddress, type RSBorScheduleDay } from "./transform";
+import { parseGeom, formatSchedule, isSpbAddress, isSpbBbox, type RSBorScheduleDay } from "./transform";
 
 describe("parseGeom", () => {
   it("extracts lng and lat from WKT POINT", () => {
@@ -70,5 +70,25 @@ describe("isSpbAddress", () => {
 
   it("rejects empty string", () => {
     expect(isSpbAddress("")).toBe(false);
+  });
+});
+
+describe("isSpbBbox", () => {
+  it("accepts coords inside SPb center", () => {
+    expect(isSpbBbox(59.94, 30.31)).toBe(true); // Дворцовая пл.
+  });
+
+  it("accepts coords on the boundary (inclusive)", () => {
+    expect(isSpbBbox(59.75, 29.9)).toBe(true);
+    expect(isSpbBbox(60.1, 30.7)).toBe(true);
+  });
+
+  it("rejects coords clearly outside (Moscow)", () => {
+    expect(isSpbBbox(55.75, 37.62)).toBe(false);
+  });
+
+  it("rejects coords just past the bounds", () => {
+    expect(isSpbBbox(59.74, 30.31)).toBe(false); // lat too low
+    expect(isSpbBbox(59.94, 30.71)).toBe(false); // lng too high
   });
 });
