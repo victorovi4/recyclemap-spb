@@ -56,7 +56,7 @@ jobs:
           revision-cores: 1
           revision-core-fraction: 100
           revision-concurrency: 8
-          revision-execution-timeout: 60s
+          revision-execution-timeout: 900s
           public: true
           revision-env: |
             AUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
@@ -69,3 +69,6 @@ jobs:
             YDB_ENDPOINT=${{ secrets.YDB_ENDPOINT }}
             YDB_DATABASE=${{ secrets.YDB_DATABASE }}
             YC_SERVICE_ACCOUNT_ID=${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+            IMPORT_SECRET=${{ secrets.IMPORT_SECRET }}
+            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+            IMPORT_REPORT_TO=${{ secrets.IMPORT_REPORT_TO }}
