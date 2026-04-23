@@ -9,11 +9,16 @@ export const dynamic = "force-dynamic";
 
 // YC Serverless Container перехватывает `Authorization: Bearer <...>` и пытается
 // валидировать его как IAM-токен — наш hex-секрет не проходит, 403 никогда не
-// доходит до приложения. Поэтому используем кастомный заголовок X-Import-Secret.
+// доходит до приложения. Поэтому принимаем secret через кастомный header
+// `X-Import-Secret` (ручной curl) ИЛИ query-string `?secret=<hex>` (YC Trigger,
+// который не поддерживает custom headers, но позволяет задать path с query).
 function authOk(req: Request): boolean {
   const expected = process.env.IMPORT_SECRET;
   if (!expected) return false;
-  const received = req.headers.get("x-import-secret") ?? "";
+  const fromHeader = req.headers.get("x-import-secret") ?? "";
+  const fromQuery = new URL(req.url).searchParams.get("secret") ?? "";
+  const received = fromHeader || fromQuery;
+  if (!received) return false;
   const a = Buffer.from(received);
   const b = Buffer.from(expected);
   if (a.length !== b.length) return false;
