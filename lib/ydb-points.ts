@@ -54,16 +54,17 @@ export async function findBySource(
   sourceId: string,
 ): Promise<ExistingPoint | null> {
   const driver = await getDriver();
-  const result = await driver.tableClient.withSession(async (session) => {
+  // Два отдельных запроса: points scalar + point_categories.
+  // AGG_LIST в subquery ломает YQL-синтаксис (missing '::' at 'AGG_LIST').
+  const pointResult = await driver.tableClient.withSession(async (session) => {
     const query = `
       DECLARE $source AS Utf8;
       DECLARE $source_id AS Utf8;
-      SELECT p.id, p.name, p.address, p.lat, p.lng, p.description, p.hours,
-             p.schedule_json, p.phone, p.website, p.photo_url, p.status,
-             p.source, p.source_id, p.manually_edited,
-             (SELECT AGG_LIST(category_id) FROM point_categories WHERE point_id = p.id) AS cats
-      FROM points AS p
-      WHERE p.source = $source AND p.source_id = $source_id;
+      SELECT id, name, address, lat, lng, description, hours,
+             schedule_json, phone, website, photo_url, status,
+             source, source_id, manually_edited
+      FROM points
+      WHERE source = $source AND source_id = $source_id;
     `;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (session as any).executeQuery(query, {
@@ -73,12 +74,30 @@ export async function findBySource(
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = (result as any).resultSets[0]?.rows ?? [];
+  const rows = (pointResult as any).resultSets[0]?.rows ?? [];
   if (rows.length === 0) return null;
 
   const r = rows[0].items as unknown as RawRow[];
+  const pointId = r[0].textValue!;
+
+  // Достаём категории отдельным запросом.
+  const catsResult = await driver.tableClient.withSession(async (session) => {
+    const query = `
+      DECLARE $pid AS Utf8;
+      SELECT category_id FROM point_categories WHERE point_id = $pid;
+    `;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (session as any).executeQuery(query, {
+      $pid: TypedValues.utf8(pointId),
+    });
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const catRows = (catsResult as any).resultSets[0]?.rows ?? [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const categoryIds = catRows.map((row: any) => row.items[0].textValue as CategoryId);
+
   const data: PointRow = {
-    id: r[0].textValue!,
+    id: pointId,
     name: r[1].textValue!,
     address: r[2].textValue!,
     lat: r[3].doubleValue!,
@@ -92,7 +111,7 @@ export async function findBySource(
     status: r[11].textValue!,
     source: r[12].textValue!,
     source_id: r[13].textValue ?? null,
-    categoryIds: (r[15].items?.map((i) => i.textValue!) ?? []) as CategoryId[],
+    categoryIds,
   };
 
   return {
