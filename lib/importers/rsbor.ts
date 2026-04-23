@@ -69,17 +69,37 @@ export async function runImport(): Promise<ImportStats> {
     console.log(`[import] fractions=${fractions.length}, categories mapped=${rsborIdMap.size}`);
 
     console.log("[import] paginating points list…");
+    const seenIds = new Set<number>();
     const allItems: { pointId: number; address: string; lat: number; lng: number }[] = [];
-    for (let page = 0; ; page++) {
+    let totalExpected = 0;
+    const MAX_PAGES = 200; // safety net
+    for (let page = 0; page < MAX_PAGES; page++) {
       const res = await fetchPointsPage({ bbox: BBOX_SPB, page, size: PAGE_SIZE });
+      if (page === 0) totalExpected = res.totalResults;
       if (res.points.length === 0) break;
+      let newThisPage = 0;
       for (const p of res.points) {
+        if (seenIds.has(p.pointId)) continue; // API бывает возвращает дубликаты после фактического конца
+        seenIds.add(p.pointId);
         const { lat, lng } = parseGeom(p.geom);
         allItems.push({ pointId: p.pointId, address: p.address, lat, lng });
+        newThisPage++;
       }
-      console.log(`[import]   page=${page} cumulative=${allItems.length}`);
+      console.log(
+        `[import]   page=${page} cumulative=${allItems.length} new=${newThisPage} (expected total=${totalExpected})`,
+      );
+      // Страница не добавила ничего нового (API зациклился) — выходим.
+      if (newThisPage === 0) {
+        console.log(`[import] page=${page} returned only duplicates, stopping pagination`);
+        break;
+      }
+      // Достигли или превысили заявленный totalResults — выходим.
+      if (totalExpected > 0 && allItems.length >= totalExpected) {
+        console.log(`[import] reached totalResults=${totalExpected}, stopping pagination`);
+        break;
+      }
     }
-    console.log(`[import] total list=${allItems.length}`);
+    console.log(`[import] total list=${allItems.length} (expected ${totalExpected})`);
 
     const spbItems = allItems.filter(
       (p) => isSpbAddress(p.address) || (p.address === "" && isSpbBbox(p.lat, p.lng)),
