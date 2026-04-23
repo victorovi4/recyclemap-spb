@@ -13,7 +13,11 @@ import {
 import { sendImportFailure, sendImportReport, type ImportStats } from "../email";
 
 const BBOX_SPB = "29.0,59.5,31.0,60.3";
-const PAGE_SIZE = 100;
+// На 2026-04-22 API recyclemap.ru игнорирует параметр page=N (всегда возвращает
+// первые N точек), поэтому работаем большим size=500 одним запросом.
+// size>1000 API возвращает ошибку. Когда пагинация починится — увеличим.
+const PAGE_SIZE = 500;
+const MAX_PAGES = 20; // safety — позже, если починят page, подхватим и их
 const DETAIL_THROTTLE_MS = 200; // 5 req/sec
 
 export function transformDetailsToPoint(
@@ -72,7 +76,6 @@ export async function runImport(): Promise<ImportStats> {
     const seenIds = new Set<number>();
     const allItems: { pointId: number; address: string; lat: number; lng: number }[] = [];
     let totalExpected = 0;
-    const MAX_PAGES = 200; // safety net
     for (let page = 0; page < MAX_PAGES; page++) {
       const res = await fetchPointsPage({ bbox: BBOX_SPB, page, size: PAGE_SIZE });
       if (page === 0) totalExpected = res.totalResults;
