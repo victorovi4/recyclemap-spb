@@ -8,7 +8,100 @@
 
 ## [Unreleased] — следующая фаза
 
-_Phase B: Data import pipeline._
+_Phase C: фронт с JSON на API + Яндекс Карты._
+
+---
+
+## [0.2.0-phase-b] — 2026-04-22 — Data import pipeline (recyclemap API → YDB)
+
+**Итог фазы:** есть eженедельный автоимпорт из публичного API recyclemap.ru в YDB с email-отчётами через Resend. В БД сохранено 101 точка по СПб (из ожидаемых ~4500 — временно ограничено багом пагинации на стороне recyclemap.ru). Когда RSBor починит пагинацию, weekly-cron сам подхватит остальные без нашего вмешательства.
+
+### Added
+
+- **HTTP endpoint** `POST /api/cron/import-rsbor` с Bearer-like auth — принимает IMPORT_SECRET через заголовок `X-Import-Secret` **ИЛИ** query-string `?secret=<hex>` (см. gotcha №3).
+- **Тонкий HTTP-клиент** recyclemap API (`lib/rsbor/api.ts`) — `fetchFractions`, `fetchPointsPage`, `fetchPointDetails` с rate-limit 5 req/sec, экспоненциальный backoff (1/2/4 сек), 3 retry. Специальный класс `NonRetryableError` для 404/400 — не делаем retry.
+- **Import-оркестратор** (`lib/importers/rsbor.ts`) — коллекция точек (size=500, без пагинации пока сломана), фильтр СПб по address или bbox fallback, транформация `schedule → текст "Пн–Чт 10:00–19:00"`, upsert в YDB с уважением к `manually_edited`.
+- **YDB-repository** `lib/ydb-points.ts` — `pointsEqual` (pure), `findBySource`, `insertPoint`, `updatePoint`, `replacePointCategories`, `fetchRsborIdMap`.
+- **Resend email** — HTML-отчёт после каждого импорта, алёрт при фатальном падении. API-key в GitHub Secrets как `RESEND_KEY`.
+- **Локальный запуск** `scripts/run-import.ts` (через `npx tsx`) — обход 10-мин таймаута YC Load Balancer при ручном curl.
+- **Vitest** — 39 юнит-тестов, 5 файлов (`transform`, `api`, `ydb-points`, `email`, `importer`).
+- **YC Trigger** `recyclemap-rsbor-import-weekly` (id `a1skaimgmnrlbqh4sa7v`) — воскресенье 00:00 UTC = 03:00 МСК, `retry-attempts=0`.
+- **Таблицы YDB** расширены:
+  - `categories`: +колонки `rsbor_id Int32?`, `icon_path Utf8?`. Справочник вырос с 8 до 13 категорий (`lamps`, `caps`, `tires`, `hazardous`, `other`). Цвета и SVG-иконки — из recyclemap.ru.
+  - `points`: +колонка `schedule_json Json?` для сырой структуры часов работы.
+- **13 SVG-иконок** категорий РС в `public/icons/fractions/` (2.2 MB, скачаны через `scripts/fetch-rsbor-icons.sh` из `recyclemap.ru/assets/icons/fractions/`).
+- **Миграции** в `sql/`: `006_migrate_categories_rsbor.sql` (DDL only), `006b_seed_rsbor_categories.sql` (seed), `007_migrate_points_schedule.sql` (schedule_json), `seed_admins.sql` (whitelist из 4 email).
+- **4-й админ** в whitelist: `tulip-yulia@yandex.ru`.
+- **GitHub Secrets:** `IMPORT_SECRET`, `IMPORT_REPORT_TO` (на `victorovi4@gmail.com`,`mtr1305@me.com`), `RESEND_KEY`.
+- **CategoryId** расширен до 13 значений в `lib/types.ts`.
+- **`scripts/`** как отдельная папка (раньше был только `*.sh`, теперь и TS).
+
+### Changed
+
+- `.github/workflows/deploy.yml`:
+  - `revision-execution-timeout: 60s → 900s` (15 минут на импорт)
+  - +3 env var: `IMPORT_SECRET`, `RESEND_API_KEY` (из `secrets.RESEND_KEY`), `IMPORT_REPORT_TO`
+- Цвета категорий переписаны с собственной палитры на узнаваемую палитру recyclemap.ru (`paper #4085F3`, `plastic #ED671C`, итд).
+- `package.json`: добавлены `vitest`, `@vitest/ui`, `tsx`, `resend`. Скрипты `test` и `test:watch`.
+
+### Fixed (во время Phase B)
+
+- `parseGeom` — regex принимал мусор вида `"POINT(1.2.3 4.5)"` (silent NaN), теперь строгий `-?\d+(?:\.\d+)?` + `isNaN` guard.
+- `RSBor HTTP client`: 4xx-non-retryable был внутри `try {}` и ловился `catch`, всё-таки retry'ился. Введён `NonRetryableError` который re-throws из catch.
+- `pointsEqual` — не проверял `id`/`source`/`source_id` (spec deviation, не баг в использовании).
+- `findBySource` — `AGG_LIST` в correlated subquery даёт YQL `missing '::' at 'AGG_LIST'`. Переписано на 2 отдельных SELECT (points + point_categories).
+- Pagination orchestrator бесконечно крутился на бажном API — добавлен dedup seen-set + лимит `MAX_PAGES=20` + stop при `totalResults` достигнут или странице без новых id.
+- `IMPORT_SECRET` env в контейнере был `""` а потом `'-'` — моя ошибка `gh secret set ... --body -` (читает `-` буквально). Исправлено явным `--body "<hex>"`.
+
+### Gotchas и уроки
+
+1. **API recyclemap.ru — сломана пагинация.** Параметр `page=N` на 2026-04-22 игнорируется — любая страница возвращает те же 500 (или 100) первых точек. `size=500` работает, `size>1000` возвращает ошибку. Временный workaround: импортируем 500 (фильтр СПб → ~100). Когда РС починит — cron подхватит всё.
+2. **YDB не миксует DDL+DML в одном query.** `ALTER TABLE ADD COLUMN ... UPDATE ...` → всё откатывается. Разделил 006 на 006 (DDL) + 006b (seed).
+3. **YC Serverless Container перехватывает `Authorization: Bearer <...>`** и пытается валидировать как IAM-token — наш hex не проходит, 403 никогда не доходит до приложения. Используем `X-Import-Secret` header ИЛИ `?secret=` query.
+4. **YC Trigger не поддерживает custom headers** — только `--invoke-container-path`. Поэтому endpoint принимает secret через query string.
+5. **YC LB 10-мин HTTP-таймаут** — при длинном ручном curl'е соединение обрывается на 10:00. Импорт в контейнере продолжает работать до `execution_timeout=900s`. Для первого ручного прогона запускали локально через `scripts/run-import.ts`.
+6. **YDB CLI auth через IAM token**: нужен env `IAM_TOKEN=$(yc iam create-token)`. В SDK: `YDB_ACCESS_TOKEN_CREDENTIALS=$(yc iam create-token)`.
+7. **RSBor CDN путь иконок** — `/assets/icons/fractions/{paper,plastic,...}.svg` (проверен через browser DevTools).
+8. **Весь код phase-b в TDD** — сначала failing test, потом impl, 39 тестов. Sonnet-субагенты, между задачами — spec compliance review + code quality review. Каждая review-итерация находила 1-2 реальных бага, уже описанных выше в Fixed.
+
+### Security / operational notes
+
+- `IMPORT_SECRET` 32-байта hex в GitHub Secrets + в env контейнера. В query-string trigger path — компромисс (попадает в YC logs). Для мирового relay — приемлемо, долгосрочно можно переделать на IAM-token validation.
+- Resend — пока шлём с `onboarding@resend.dev` (sandbox). Когда купим домен (Phase G) — верифицируем SPF/DKIM, сменим на `noreply@recyclemap-spb.ru`.
+- `points` в YDB сейчас 101 строка — Phase C переключит фронт с `data/points.json` на API, и эти точки появятся на карте.
+
+### Ключевые коммиты (chronological)
+
+```
+27ec704 docs: Phase B design — RSBor API import pipeline
+1602019 docs: Phase B implementation plan (18 tasks, ~12h)
+a7647c8 feat(phase-b): vitest setup + parseGeom helper
+be0a60e fix(phase-b): parseGeom rejects malformed WKT, add error-path tests
+9fad89c types: expand CategoryId to 13 RSBor fractions
+b13e67e feat(phase-b): transform helpers (formatSchedule, isSpbAddress, isSpbBbox)
+6819dc0 test(phase-b): cover isSpbBbox bounds
+31449d0 feat(phase-b): TypeScript types for RSBor public API
+1ac3974 feat(phase-b): RSBor API HTTP client with retry
+6864589 fix(phase-b): honor non-retryable 4xx in RSBor client + tests
+3f90748 sql: migration 006 — RSBor categories (+5 new, colors, icons)
+d562a27 sql: migration 007 — add points.schedule_json
+ddcfcab feat(phase-b): YDB points repository (upsert + category sync)
+65f6ab0 fix(phase-b): pointsEqual compares all scalar PointRow fields
+07f8aa2 feat(phase-b): Resend email client + HTML report template
+93458a1 feat(phase-b): RSBor import orchestrator
+d3cfbf2 feat(phase-b): POST /api/cron/import-rsbor endpoint with Bearer auth
+7d88cb2 ci: extend container timeout to 900s, add import/resend env vars
+7b4537e assets(phase-b): 13 RSBor category icons + fetch script
+94c5f7a sql: split migration 006 into DDL (006) + seed (006b)
+1a648e6 sql: slim 006 to DDL only (seed moved to 006b)
+b729504 seed: add tulip-yulia@yandex.ru to admins whitelist
+f228c55 ci: RESEND_API_KEY env reads from RESEND_KEY secret
+d3eac6a fix(phase-b): use X-Import-Secret header (YC intercepts Authorization)
+6c09db9 fix(phase-b): stop pagination on totalResults + dedup + max 200 pages
+7c9e2d7 fix(phase-b): findBySource uses two SELECTs (AGG_LIST breaks YQL)
+4c9bd73 fix(phase-b): PAGE_SIZE 100→500 (workaround RSBor pagination bug)
+b3f5f90 feat(phase-b): accept IMPORT_SECRET via ?secret= query
+```
 
 ---
 
