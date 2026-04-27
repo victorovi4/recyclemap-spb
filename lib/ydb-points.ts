@@ -1,4 +1,4 @@
-import type { CategoryId } from "./types";
+import type { CategoryId, PublicPoint } from "./types";
 import { getDriver, TypedValues } from "./ydb";
 
 export type PointRow = {
@@ -236,4 +236,65 @@ export async function fetchRsborIdMap(): Promise<Map<number, CategoryId>> {
     map.set(items[1].int32Value!, items[0].textValue! as CategoryId);
   }
   return map;
+}
+
+const RSBOR_PHOTO_PREFIX = "https://recyclemap.ru/images/";
+
+export async function fetchAllPoints(): Promise<PublicPoint[]> {
+  const driver = await getDriver();
+
+  // Два отдельных запроса, потому что AGG_LIST в correlated subquery ломает
+  // YQL-парсер ("missing '::' at 'AGG_LIST'") — см. Phase B/findBySource.
+  const pointsResult = await driver.tableClient.withSession(async (session) => {
+    const query = `
+      SELECT id, name, address, lat, lng, description, hours,
+             phone, website, photo_url
+      FROM points
+      WHERE status = "active";
+    `;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (session as any).executeQuery(query, {});
+  });
+
+  const catsResult = await driver.tableClient.withSession(async (session) => {
+    const query = `SELECT point_id, category_id FROM point_categories;`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (session as any).executeQuery(query, {});
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pointRows = (pointsResult as any).resultSets[0]?.rows ?? [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const catRows = (catsResult as any).resultSets[0]?.rows ?? [];
+
+  const catsByPoint = new Map<string, CategoryId[]>();
+  for (const r of catRows) {
+    const pid = r.items[0].textValue as string;
+    const cid = r.items[1].textValue as CategoryId;
+    const list = catsByPoint.get(pid);
+    if (list) list.push(cid);
+    else catsByPoint.set(pid, [cid]);
+  }
+
+  const points: PublicPoint[] = [];
+  for (const r of pointRows) {
+    const items = r.items;
+    const id = items[0].textValue as string;
+    const photoRaw: string | null = items[9]?.textValue ?? null;
+    points.push({
+      id,
+      name: items[1].textValue ?? "",
+      address: items[2].textValue ?? "",
+      lat: items[3].doubleValue ?? 0,
+      lng: items[4].doubleValue ?? 0,
+      description: items[5]?.textValue ?? null,
+      hours: items[6]?.textValue ?? null,
+      phone: items[7]?.textValue ?? null,
+      website: items[8]?.textValue ?? null,
+      photoUrl: photoRaw ? `${RSBOR_PHOTO_PREFIX}${photoRaw}` : null,
+      categoryIds: catsByPoint.get(id) ?? [],
+    });
+  }
+
+  return points;
 }
