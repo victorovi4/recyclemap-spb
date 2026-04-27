@@ -8,7 +8,64 @@
 
 ## [Unreleased] — следующая фаза
 
-_Phase C: фронт с JSON на API + Яндекс Карты._
+_Phase D: UX-клон recyclemap.ru — чипы вместо чекбоксов, сайдбар, URL-стейт, маршруты, share._
+
+---
+
+## [0.3.0-phase-c] — 2026-04-27 — Фронт читает YDB
+
+**Итог фазы:** публика видит реальные точки приёма из YDB (101 RSBor + 24 manual = 125). Фильтр расширен до 13 категорий. Маркер показывает все категории «бусами» (max 5 + хвост `+N`), близкие группируются в кластеры через `react-leaflet-cluster`. Движок карты остаётся Leaflet+OSM — миграция на Яндекс Карты отложена без срока.
+
+### Added
+
+- `app/page.tsx` стал async Server Component — читает YDB через `fetchAllPoints()` и `fetchAllCategories()`. `export const dynamic = "force-dynamic"` — рендер на каждом запросе, без prerender при build (env YDB-vars приходят только в runtime).
+- `components/HomeClient.tsx` — клиентская обёртка с фильтр-стейтом (useState/useMemo, toggle/selectAll/reset).
+- `components/beadMarker.ts` — pure helper для генерации HTML «бус», лимит 5+«+N», hex-валидация цветов как XSS-фильтр.
+- `lib/categories.ts:fetchAllCategories()` — возвращает `PublicCategory[]` из YDB.
+- `lib/ydb-points.ts:fetchAllPoints()` — возвращает `PublicPoint[]` (с `WHERE status='active'`), формирует `photoUrl` с префиксом `https://recyclemap.ru/images/`.
+- Кластеризация через `react-leaflet-cluster` (новая зависимость + `leaflet.markercluster`). `chunkedLoading`, `maxClusterRadius=50`, `disableClusteringAtZoom=15`.
+- 13 чекбоксов категорий (вместо 8) — таксономия из YDB, сортировка по `sort_order`.
+- `components/PointPopup.tsx` переписан под `PublicPoint`: фото сверху, цветные бэйджи всех категорий (отсортированы по sortOrder), SVG-иконки РС с `invert` filter, fallback на эмодзи.
+- Скрипт миграции `scripts/migrate-legacy-points.ts` (одноразовый): 30 mock-точек → YDB как `source='manual'` с дедупликацией по haversine-радиусу 150 м. После прогона: 24 created, 6 skipped (дубли с RSBor). Скрипт удалён в Task 12.
+
+### Changed
+
+- `data/points.json`, `data/categories.json`, `lib/data.ts` — удалены, история в git.
+- `lib/types.ts`: старые `Point`/`Category` заменены на `PublicPoint`/`PublicCategory`. `iconPath: string | null`, `emoji: string`, `sortOrder: number`, `categoryIds: CategoryId[]`, `photoUrl: string | null` (полный URL с префиксом).
+- `vitest.config.ts`: тестовый glob расширен до `["lib/**/*.test.ts", "app/**/*.test.ts", "scripts/**/*.test.ts", "components/**/*.test.ts"]`.
+- `docs/superpowers/specs/2026-04-22-recyclemap-spb-full-design.md`: карта осталась Leaflet, чтение через RSC, Nominatim вместо Яндекс Геокодера, Phase C закрыта за 6–8 ч (вместо 10–15).
+
+### Решения, отступившие от full-design.md
+
+- **Карта остаётся на Leaflet+OSM**, Яндекс Карты отложены без срока. Аргументы: Leaflet работает, ключ Яндекс несёт риск permanent block при превышении лимита и сложность регистрации; партнёрский recyclemap.ru тоже использует Яндекс — но техническое сходство тут не приоритет.
+- **Чтение через RSC, не через `/api/points`**. Внешних потребителей API нет, server-component-driven подход проще и быстрее. К endpoint'у вернёмся в Phase D или позже, когда появятся (мобильный клиент, виджеты, чат-боты из backlog).
+- **Чипы, сайдбар, URL-стейт, маршруты, share** — отложены в Phase D.
+
+### Gotchas и уроки
+
+1. **Build vs runtime env vars в Next.js 16.** Без `export const dynamic = 'force-dynamic'` Next.js пытается prerender'ить главную страницу при `npm run build`, и YDB-fetcher падает с "YDB_ENDPOINT and YDB_DATABASE env vars are required" — env-переменные приходят из YC контейнера в runtime, а не build time. Первый деплой Phase C упал именно на этом, исправили в коммите `8484a59`.
+2. **`revalidate` несовместим с `force-dynamic`.** Если стоит `force-dynamic`, `revalidate` молча игнорируется. Если кеш на 5 минут реально нужен — оборачивать `fetchAllPoints` в `unstable_cache()`. Пока трафика мало, рендер на каждый запрос комфортный.
+3. **`react-leaflet-cluster@2.x` поддерживает `react-leaflet@5`.** Несмотря на то, что библиотека изначально писалась для v4, peer-deps пройти проходят, и в рантайме маркеры группируются корректно (проверено локально и на проде).
+4. **`AGG_LIST` в YQL subquery всё ещё ломает парсер** (см. Phase B/findBySource). В `fetchAllPoints` использовали тот же двухзапросный паттерн: SELECT points + SELECT point_categories, мерж в JS. Для 4500 точек масштабируется без проблем.
+5. **CLI-guard `process.argv[1]` regex** в `scripts/migrate-legacy-points.ts` — критичен для отделения CLI-запуска от vitest-импорта. Без него `main()` стартует при импорте helpers в тест и пытается читать JSON / коннектиться к YDB.
+6. **Идемпотентность миграции через стабильный slug-id.** `manual-${slug}-${lat.toFixed(4)}` — если запустить скрипт второй раз, точки сами найдут себя как дубли (0 м), `created=0, skipped=N`. Удобно для бэкапа: можно прогнать после хаоса в YDB.
+
+### Ключевые коммиты
+
+```
+30e1703 docs: Phase C design — frontend reads from YDB via RSC + Leaflet
+1992cb2 docs: Phase C implementation plan (13 tasks, ~6-8h, TDD)
+643abf6 feat(phase-c): add PublicPoint and PublicCategory types
+626f4f3 feat(phase-c): fetchAllPoints reads YDB into PublicPoint[]
+72e55d7 feat(phase-c): fetchAllCategories returns PublicCategory[]
+fabd9dc feat(phase-c): migrate-legacy-points script with dedup by radius
+33e9cd3 feat(phase-c): app/page.tsx as Server Component + HomeClient
+d99bc13 feat(phase-c): bead marker shows all categories on a single pin
+18ff50e feat(phase-c): cluster nearby markers with react-leaflet-cluster
+4b0ac55 feat(phase-c): popup shows photo, sorted categories with RSBor icons
+8484a59 fix(phase-c): force dynamic rendering — avoid YDB call at build time
+51c47b0 chore(phase-c): retire data/points.json, data/categories.json, lib/data.ts, migration script
+```
 
 ---
 
