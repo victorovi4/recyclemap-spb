@@ -64,8 +64,7 @@ export default function MapInner({ points, categories }: Props) {
           return (
             <Marker key={p.id} position={[p.lat, p.lng]} icon={beadIcon(colors)}>
               <Popup>
-                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                <PointPopup point={p as any} categoryById={categoryById as any} />
+                <PointPopup point={p} categoryById={categoryById} />
               </Popup>
             </Marker>
           );
