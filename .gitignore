@@ -47,3 +47,6 @@ next-env.d.ts
 # Superpowers brainstorming mockups
 .superpowers/
 nstall-dir/
+
+# MCP Serena cache (local)
+.serena/
