@@ -1,9 +1,9 @@
 "use client";
 
-import type { Category, CategoryId } from "@/lib/types";
+import type { PublicCategory, CategoryId } from "@/lib/types";
 
 type Props = {
-  categories: Category[];
+  categories: PublicCategory[];
   selected: Set<CategoryId>;
   onToggle: (id: CategoryId) => void;
   onSelectAll: () => void;
@@ -39,7 +39,7 @@ export default function FilterPanel({
                 aria-hidden
               />
               <span className="text-sm">
-                {c.icon} {c.label}
+                {c.emoji} {c.label}
               </span>
             </label>
           </li>

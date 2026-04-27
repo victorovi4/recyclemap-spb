@@ -9,7 +9,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Point, Category, CategoryId } from "@/lib/types";
+import type { PublicPoint, PublicCategory, CategoryId } from "@/lib/types";
 import PointPopup from "./PointPopup";
 
 function coloredIcon(color: string): L.DivIcon {
@@ -26,12 +26,12 @@ function coloredIcon(color: string): L.DivIcon {
 }
 
 type Props = {
-  points: Point[];
-  categories: Category[];
+  points: PublicPoint[];
+  categories: PublicCategory[];
 };
 
 export default function MapInner({ points, categories }: Props) {
-  const categoryById = new Map<CategoryId, Category>(
+  const categoryById = new Map<CategoryId, PublicCategory>(
     categories.map((c) => [c.id, c])
   );
 
@@ -50,7 +50,7 @@ export default function MapInner({ points, categories }: Props) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {points.map((p) => {
-        const primary = categoryById.get(p.categories[0]);
+        const primary = categoryById.get(p.categoryIds[0]);
         const color = primary?.color ?? "#888";
         return (
           <Marker
@@ -59,7 +59,8 @@ export default function MapInner({ points, categories }: Props) {
             icon={coloredIcon(color)}
           >
             <Popup>
-              <PointPopup point={p} categoryById={categoryById} />
+              {/* PointPopup still uses old Point type — will be updated in Task 9 */}
+              <PointPopup point={p as any} categoryById={categoryById as any} />
             </Popup>
           </Marker>
         );

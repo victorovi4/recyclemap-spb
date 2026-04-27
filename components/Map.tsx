@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { Point, Category } from "@/lib/types";
+import type { PublicPoint, PublicCategory } from "@/lib/types";
 
 const MapInner = dynamic(() => import("./MapInner"), {
   ssr: false,
@@ -13,8 +13,8 @@ const MapInner = dynamic(() => import("./MapInner"), {
 });
 
 type Props = {
-  points: Point[];
-  categories: Category[];
+  points: PublicPoint[];
+  categories: PublicCategory[];
 };
 
 export default function Map(props: Props) {
