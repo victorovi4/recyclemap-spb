@@ -8,7 +8,70 @@
 
 ## [Unreleased] — следующая фаза
 
-_Phase D: UX-клон recyclemap.ru — чипы вместо чекбоксов, сайдбар, URL-стейт, маршруты, share._
+_Phase D, часть 2: сайдбар точки / bottom-sheet (vaul) / `/point/:id` route._
+
+---
+
+## [0.4.0-phase-d-1] — 2026-04-28 — Чипы + URL-стейт
+
+**Итог мини-фазы:** карта стала **shareable** — пользователь может выбрать категории, отпанорамировать в нужный район, скопировать URL и поделиться. Получатель ссылки откроет ту же карту с тем же фильтром, центром и зумом. На мобильном фильтры теперь доступны через нативный `<details>` под header.
+
+### Added
+
+- `lib/url-state.ts` — три парсера для `nuqs`: `fractionsParser` (массив category id через запятую), `llParser` (`lat,lng` с 4 знаками после запятой, валидация диапазонов), `zoomParser` (целое 8..18). Плюс `sanitizeFractions()` — отбрасывает невалидные id.
+- `components/CategoryChip.tsx` — пресентационный filled-чип с `aria-pressed`, фокус-ring через `focus-visible`, фон через инлайн-style (`category.color`).
+- `components/MobileFilterDrawer.tsx` — нативный `<details>` со счётчиком выбранных категорий и точек в шапке. Виден только на `<md`.
+- `components/MapView.tsx` — `useMap()` + useEffect: применяет внешние `center`/`zoom` props к Leaflet через `setView(.., { animate: false })`. `lastApplied` ref защищает от петли URL → карта → URL.
+- `components/MapEventsBridge.tsx` — `useMapEvents({ moveend })` с debounce 300ms; колбэк отдаёт округлённые координаты в HomeClient.
+- `nuqs@^2.8` (новая зависимость, ~5 KB).
+- `<NuqsAdapter>` обёртка в `app/layout.tsx`.
+- 17 юнит-тестов в `lib/url-state.test.ts` (round-trip, граничные случаи, мусорные значения, валидация id'шников).
+
+### Changed
+
+- `components/HomeClient.tsx` полностью переписан: `useState` → 3 `useQueryState` hook'а из nuqs. Layout — `flex-col md:flex-row` с двумя FilterPanel (mobile drawer + desktop sidebar). Передаёт `center`/`zoom`/`onMoveEnd` в Map.
+- `components/FilterPanel.tsx` — `<input type=checkbox>` → `<CategoryChip>` во `flex-wrap`. Принимает те же props.
+- `components/Map.tsx`, `components/MapInner.tsx` — добавлены props `center`, `zoom`, `onMoveEnd`. Внутри `<MapContainer>` теперь `<MapView>` и `<MapEventsBridge>`.
+- `app/globals.css` — стили `details[open] > summary .filter-arrow { transform: rotate(180deg) }` для крутящейся стрелочки на мобиле.
+
+### Поведение URL
+
+| Состояние | URL |
+|---|---|
+| Все 13 категорий, дефолтный вид | `/` |
+| Только пластик и стекло, дефолтный вид | `/?f=plastic,glass` |
+| Ничего не выбрано | `/?f=` |
+| Все 13, центр на Невском, зум 13 | `/?ll=59.9311,30.3609&z=13` |
+| Только батарейки, в Колпино, зум 14 | `/?f=batteries&ll=59.7508,30.5969&z=14` |
+
+### Решения, отступившие от full-design.md
+
+- **Чипы в сайдбаре, не сверху.** В full-design было размытое «фильтры (280px)»; на брейншторме D-1 решили сохранить колоночный layout — на чипах с emoji+text оба варианта выглядят OK, а сохранение текущей структуры экономит работу.
+- **Короткие имена параметров** `f`/`ll`/`z` вместо `fractions`/`lat=&lng=`/`zoom`. URL компактнее в шаринге, конкретные имена в спеке зафиксированы.
+- **Mobile через native `<details>`**, не bottom-sheet с `vaul`. Vaul придёт в D-2 вместе с сайдбаром деталей точки. `<details>` — нулевая сложность, нулевые библиотеки, accessible из коробки.
+
+### Gotchas и уроки
+
+1. **`nuqs` `parseAsArrayOf(parseAsString, ",")` без `.withDefault(null)` различает `null` (параметра нет) и `[]` (явный `?f=`).** Это и нужно для нашего поведения «нет параметра = все включены».
+2. **`router.replace` (`history: "replace"`) обязателен.** Иначе каждый drag карты добавлял бы entry в browser history, и кнопка «Назад» дёрнула бы ESC по истории по точке за раз.
+3. **`MapView` без `lastApplied` ref** — петля URL ↔ карта на первом же drag'e: setView запустит moveend, который запишет тот же URL, который снова триггерит useEffect.
+4. **300ms debounce на moveend** — компромисс. <100ms — URL мерцает; >500ms — заметная задержка при шаринге.
+5. **Tailwind v4 не имеет `group-open:` варианта** — нативный `<details>` управляется через CSS `details[open] > summary > .filter-arrow`. В globals.css.
+
+### Ключевые коммиты
+
+```
+2c0b852 docs: Phase D-1 design — chips + URL state
+3046af0 docs: Phase D-1 implementation plan (11 tasks, ~10-12h, TDD)
+e18f1b0 feat(phase-d-1): add nuqs + NuqsAdapter wrapper
+b9c9072 feat(phase-d-1): URL-state parsers (fractions, ll, zoom)
+a822069 feat(phase-d-1): CategoryChip component (filled, accessible)
+ca60662 refactor(phase-d-1): FilterPanel uses CategoryChip instead of checkboxes
+fd174b6 feat(phase-d-1): MobileFilterDrawer (native <details> with chevron)
+c9cb44a feat(phase-d-1): MapView + MapEventsBridge for URL ↔ map sync
+5d19fd7 feat(phase-d-1): MapInner accepts center/zoom/onMoveEnd props
+8f7ec46 feat(phase-d-1): HomeClient owns URL state via nuqs (f/ll/z)
+```
 
 ---
 
