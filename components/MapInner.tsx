@@ -15,6 +15,8 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { PublicPoint, PublicCategory, CategoryId } from "@/lib/types";
 import PointPopup from "./PointPopup";
 import { buildBeadHtml } from "./beadMarker";
+import MapView from "./MapView";
+import MapEventsBridge from "./MapEventsBridge";
 
 function beadIcon(colors: string[]): L.DivIcon {
   return L.divIcon({
@@ -27,22 +29,32 @@ function beadIcon(colors: string[]): L.DivIcon {
 type Props = {
   points: PublicPoint[];
   categories: PublicCategory[];
+  center: [number, number];
+  zoom: number;
+  onMoveEnd: (center: [number, number], zoom: number) => void;
 };
 
-export default function MapInner({ points, categories }: Props) {
+export default function MapInner({
+  points,
+  categories,
+  center,
+  zoom,
+  onMoveEnd,
+}: Props) {
   const categoryById = new Map<CategoryId, PublicCategory>(
-    categories.map((c) => [c.id, c])
+    categories.map((c) => [c.id, c]),
   );
 
   return (
     <MapContainer
-      center={[59.9386, 30.3141]}
-      zoom={11}
+      center={center}
+      zoom={zoom}
       className="h-full w-full"
       scrollWheelZoom
       attributionControl={false}
     >
-      {/* Своя атрибуция без префикса "Leaflet" — оставляем только OSM (требование их лицензии) */}
+      <MapView center={center} zoom={zoom} />
+      <MapEventsBridge onMoveEnd={onMoveEnd} />
       <AttributionControl prefix={false} />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>'
@@ -62,7 +74,11 @@ export default function MapInner({ points, categories }: Props) {
             .sort((a, b) => a.sortOrder - b.sortOrder);
           const colors = sortedCats.map((c) => c.color);
           return (
-            <Marker key={p.id} position={[p.lat, p.lng]} icon={beadIcon(colors)}>
+            <Marker
+              key={p.id}
+              position={[p.lat, p.lng]}
+              icon={beadIcon(colors)}
+            >
               <Popup>
                 <PointPopup point={p} categoryById={categoryById} />
               </Popup>

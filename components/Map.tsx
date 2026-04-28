@@ -15,6 +15,9 @@ const MapInner = dynamic(() => import("./MapInner"), {
 type Props = {
   points: PublicPoint[];
   categories: PublicCategory[];
+  center: [number, number];
+  zoom: number;
+  onMoveEnd: (center: [number, number], zoom: number) => void;
 };
 
 export default function Map(props: Props) {
