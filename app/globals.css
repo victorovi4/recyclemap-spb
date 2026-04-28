@@ -37,3 +37,13 @@ body {
   padding: 0 2px;
   font-weight: 600;
 }
+
+/* Phase D-1: rotate the chevron when <details> is open */
+details[open] > summary .filter-arrow {
+  transform: rotate(180deg);
+}
+
+/* Hide native details marker (Safari shows triangle by default even with list-none) */
+details > summary::-webkit-details-marker {
+  display: none;
+}
