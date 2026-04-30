@@ -80,3 +80,10 @@ export const zoomParser = createParser({
     return String(v);
   },
 }).withOptions(COMMON);
+
+/**
+ * pointParser — id выбранной точки. Просто string; реальная валидация
+ * происходит в HomeClient через `points.find(p => p.id === pointId)`.
+ * Невалидный id → setP(null) тихо очищает URL.
+ */
+export const pointParser = parseAsString.withOptions(COMMON);

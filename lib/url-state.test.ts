@@ -4,6 +4,7 @@ import {
   llParser,
   zoomParser,
   sanitizeFractions,
+  pointParser,
 } from "./url-state";
 
 describe("fractionsParser", () => {
@@ -100,5 +101,14 @@ describe("zoomParser", () => {
 
   it("serializes integer to string", () => {
     expect(zoomParser.serialize(11)).toBe("11");
+  });
+});
+
+describe("pointParser", () => {
+  it("parses string id", () => {
+    expect(pointParser.parse("rsbor-1234")).toBe("rsbor-1234");
+  });
+  it("parses any non-empty string", () => {
+    expect(pointParser.parse("manual-foo-59.9")).toBe("manual-foo-59.9");
   });
 });
