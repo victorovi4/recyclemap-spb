@@ -18,6 +18,8 @@ type Props = {
   center: [number, number];
   zoom: number;
   onMoveEnd: (center: [number, number], zoom: number) => void;
+  onPointClick: (id: string) => void;
+  forcePoint: { lat: number; lng: number } | null;
 };
 
 export default function Map(props: Props) {

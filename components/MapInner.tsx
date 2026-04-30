@@ -4,7 +4,6 @@ import {
   MapContainer,
   TileLayer,
   Marker,
-  Popup,
   AttributionControl,
 } from "react-leaflet";
 import L from "leaflet";
@@ -13,7 +12,6 @@ import MarkerClusterGroup from "react-leaflet-cluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { PublicPoint, PublicCategory, CategoryId } from "@/lib/types";
-import PointPopup from "./PointPopup";
 import { buildBeadHtml } from "./beadMarker";
 import MapView from "./MapView";
 import MapEventsBridge from "./MapEventsBridge";
@@ -32,6 +30,8 @@ type Props = {
   center: [number, number];
   zoom: number;
   onMoveEnd: (center: [number, number], zoom: number) => void;
+  onPointClick: (id: string) => void;
+  forcePoint: { lat: number; lng: number } | null;
 };
 
 export default function MapInner({
@@ -40,6 +40,8 @@ export default function MapInner({
   center,
   zoom,
   onMoveEnd,
+  onPointClick,
+  forcePoint,
 }: Props) {
   const categoryById = new Map<CategoryId, PublicCategory>(
     categories.map((c) => [c.id, c]),
@@ -53,7 +55,7 @@ export default function MapInner({
       scrollWheelZoom
       attributionControl={false}
     >
-      <MapView center={center} zoom={zoom} />
+      <MapView center={center} zoom={zoom} forcePoint={forcePoint} />
       <MapEventsBridge onMoveEnd={onMoveEnd} />
       <AttributionControl prefix={false} />
       <TileLayer
@@ -78,11 +80,8 @@ export default function MapInner({
               key={p.id}
               position={[p.lat, p.lng]}
               icon={beadIcon(colors)}
-            >
-              <Popup>
-                <PointPopup point={p} categoryById={categoryById} />
-              </Popup>
-            </Marker>
+              eventHandlers={{ click: () => onPointClick(p.id) }}
+            />
           );
         })}
       </MarkerClusterGroup>
