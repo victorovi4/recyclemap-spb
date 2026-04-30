@@ -8,7 +8,85 @@
 
 ## [Unreleased] — следующая фаза
 
-_Phase D, часть 2: сайдбар точки / bottom-sheet (vaul) / `/point/:id` route._
+_Phase D, часть 3: кнопки «🗺 Маршрут (Яндекс/Google)» и «🔗 Поделиться» через native Web Share API._
+
+---
+
+## [0.5.0-phase-d-2] — 2026-04-30 — Детали точки + URL `?p=`
+
+**Итог мини-фазы:** клик по маркеру теперь открывает полноценную панель деталей: сайдбар справа на десктопе (overlay 360px со slide-in анимацией) или bottom-sheet снизу на мобиле (vaul, 2 snap-точки 40%/92%). Прямые ссылки на точки через URL: `/?p=rsbor-1234` восстанавливает state, карта плавно центрируется на точке с zoom ≥14. Leaflet balloon убран — единый источник истины.
+
+### Added
+
+- `components/PointDetails.tsx` — общий пресентационный компонент (контент сайдбара/шита). Фото h-40, название text-lg, адрес, бэйджи с цветами и иконками РС, часы, телефон-ссылка, сайт-ссылка, описание + крестик закрытия с aria-label и focus-visible.
+- `components/PointDetailsSidebar.tsx` — desktop overlay 360px справа. Slide-in через `transition-transform duration-300 ease-out`, всегда в DOM (управляется `translate-x-0/full`), `aria-hidden` для accessibility.
+- `components/PointDetailsSheet.tsx` — mobile bottom-sheet через `vaul.Drawer`. Snap-точки `[0.4, 0.92]`, controlled snap state через `useState` + `setActiveSnapPoint`. `Drawer.Title` с `sr-only` для accessibility. Overlay `bg-black/20`.
+- `lib/url-state.ts` + `pointParser` — `parseAsString.withOptions({ history: "replace", shallow: true })`.
+- `vaul@^1.1` (новая зависимость, ~10 KB).
+- 2 юнит-теста для `pointParser` в `lib/url-state.test.ts`.
+- `useEffect` в HomeClient для тихой очистки невалидного `?p=` через `setPoint(null)`.
+- `useEffect` в HomeClient для ESC keydown listener (закрывает sidebar/sheet на десктопе).
+
+### Changed
+
+- `components/MapView.tsx` — добавлен prop `forcePoint: { lat, lng } | null`. Когда задан — `setView` с `animate: true` и `zoom = max(currentZoom, 14)`. Защита от петли через единый `lastApplied.current.key` (строковый ключ, разный для force-режима и view-режима).
+- `components/Map.tsx` + `components/MapInner.tsx` — добавлены props `onPointClick: (id: string) => void` и `forcePoint`. Проброс в MapView.
+- `components/MapInner.tsx`:
+  - **Удалён** Leaflet `<Popup>` и его импорт.
+  - `<Marker>` теперь самозакрывающийся, получает `eventHandlers={{ click: () => onPointClick(p.id) }}`.
+- `components/HomeClient.tsx`:
+  - 4-й `useQueryState("p", pointParser)`.
+  - `selectedPoint` через `points.find(p => p.id === pointId)`.
+  - `categoryById` Map через `useMemo` (с `globalThis.Map` чтобы избежать shadow от `import Map from "@/components/Map"`).
+  - `forcePoint` derived value (передаётся в Map).
+  - useEffect для очистки невалидного id и для ESC.
+  - Рендер `<PointDetailsSidebar>` (внутри `<section>` карты, через `position: absolute`) и `<PointDetailsSheet>` (вне layout, через Portal vaul).
+
+### Removed
+
+- `components/PointPopup.tsx` — контент переехал в `PointDetails.tsx`. История в git.
+
+### Поведение URL
+
+| Состояние | URL |
+|---|---|
+| Точка открыта на карте | `/?p=rsbor-560&ll=59.7324,30.3428&z=14` |
+| + сохраняются фильтры | `/?f=plastic,glass&p=rsbor-560` |
+| Невалидный id (точку удалили) | автоматически чистится до `/` |
+| Закрытие через × или ESC | `?p=` уходит, `?ll&z` остаются |
+
+### Решения, отступившие от full-design.md
+
+- **`?p=<id>` через nuqs, не `/point/:id` route.** Семантически URL менее «честный» (это не отдельная страница, а параметр), но проще и автоматически сохраняет существующие `?f`/`?ll`/`?z`. Если в Phase G решим, что нужен SEO для отдельных страниц точек — добавим redirect-route поверх.
+- **Auto-pan переопределяет `?ll/z` при наличии `?p=`.** Спека позволяла оба варианта — выбран более user-friendly: ссылка «эта точка» гарантирует что точка видна на карте, даже если из URL пришли другие координаты.
+- **Один источник истины — сайдбар/шит, без Leaflet `<Popup>`.** На recyclemap.ru то же самое.
+- **Без выделения активного маркера** (border/scale/glow) — отложено в D-3 или позже.
+
+### Gotchas и уроки
+
+1. **`vaul.Drawer` 1.1.x с `snapPoints` требует controlled snap.** Без `activeSnapPoint` + `setActiveSnapPoint` (через `useState`) sheet оставался за пределами viewport (transform translateY(100%) не обновлялся). Найдено в smoke-тесте Task 9.
+2. **`Drawer.Title` с `sr-only` обязателен** для accessibility. Без него vaul выдаёт console warning.
+3. **`md:hidden` на `Drawer.Overlay` И на `Drawer.Content`** — без второго vaul рендерит content в Portal даже на десктопе.
+4. **Защита от петли URL ↔ карта в MapView v2.** Использовать единый `key`-ref, а не отдельные refs для center/zoom и forcePoint. Иначе при переключении из view-режима в force-режим (открытие точки) refs из старого режима устаревают.
+5. **`eventHandlers={{ click }}` на `<Marker>` срабатывает и на тач-устройствах** — react-leaflet@5 транслирует tap в click.
+6. **`import Map from "@/components/Map"` shadow'ит built-in `Map` constructor** — для использования built-in Map в том же файле использовать `globalThis.Map` или переименовать импорт (`MapComponent`).
+7. **Свайп вниз ниже peek (40%) автоматически закрывает шит** — vaul внутренний механизм через `onOpenChange(false)`.
+
+### Ключевые коммиты
+
+```
+549bf47 docs: Phase D-2 design — point details sidebar + bottom-sheet + URL
+8ff7e2f docs: Phase D-2 implementation plan (11 tasks, ~10h, TDD)
+0b95fee feat(phase-d-2): add vaul + pointParser for ?p= URL state
+6dc9bbc feat(phase-d-2): PointDetails component (shared content for sidebar+sheet)
+6f65be3 feat(phase-d-2): PointDetailsSidebar (desktop overlay with slide-in)
+6737547 feat(phase-d-2): PointDetailsSheet (mobile bottom-sheet via vaul)
+2a9aab1 feat(phase-d-2): MapView accepts forcePoint with auto-pan + zoom
+c81f16c feat(phase-d-2): MapInner removes <Popup>, adds eventHandlers + forcePoint
+331e7b7 feat(phase-d-2): HomeClient owns ?p= state + sidebar/sheet rendering
+f761950 chore(phase-d-2): retire PointPopup.tsx (replaced by PointDetails)
+b66efe1 fix(phase-d-2): vaul controlled snap — sheet showed off-screen
+```
 
 ---
 
