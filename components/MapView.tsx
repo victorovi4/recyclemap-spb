@@ -6,29 +6,50 @@ import { useMap } from "react-leaflet";
 type Props = {
   center: [number, number];
   zoom: number;
+  forcePoint: { lat: number; lng: number } | null;
 };
 
 /**
- * Применяет внешние center/zoom (из URL) к карте, не вызывая событий moveend
- * (animate: false). Защита от петли URL → карта → URL: храним последнюю
- * применённую позицию и пропускаем повторное setView, если props не менялись.
+ * Применяет внешние center/zoom к карте. Если задан forcePoint, имеет
+ * приоритет: setView на координаты точки с zoom = max(current, 14)
+ * и animate: true (плавный pan).
+ *
+ * Защита от петли URL ↔ карта:
+ *   `lastApplied.current.key` — единый строковый ключ для обоих режимов.
+ *   Если ключ совпадает с предыдущим — setView НЕ вызывается.
+ *
+ * Сценарий открытия точки:
+ *   1. Пользователь кликает маркер → setP(id) → forcePoint появляется.
+ *   2. MapView вызывает setView({ animate: true }), карта плавно едет.
+ *   3. После анимации Leaflet генерит moveend → MapEventsBridge через 300ms
+ *      пишет ?ll&z в URL.
+ *   4. На следующем рендере MapView видит ТОТ ЖЕ forcePoint → key не
+ *      изменился → setView не вызывается. Петли нет.
+ *   5. Пользователь нажимает × → setP(null) → forcePoint станет null →
+ *      MapView переключается на view-mode. center/zoom уже актуальные
+ *      (Leaflet знает свою позицию), так что setView будет no-op либо
+ *      минимальная перерисовка без анимации.
  */
-export default function MapView({ center, zoom }: Props) {
+export default function MapView({ center, zoom, forcePoint }: Props) {
   const map = useMap();
-  const lastApplied = useRef<{ center: [number, number]; zoom: number }>({
-    center,
-    zoom,
-  });
+  const lastApplied = useRef<{ key: string }>({ key: "" });
 
   useEffect(() => {
-    const same =
-      lastApplied.current.center[0] === center[0] &&
-      lastApplied.current.center[1] === center[1] &&
-      lastApplied.current.zoom === zoom;
-    if (same) return;
-    lastApplied.current = { center, zoom };
+    if (forcePoint) {
+      const newZoom = Math.max(map.getZoom(), 14);
+      const key = `pt:${forcePoint.lat},${forcePoint.lng},${newZoom}`;
+      if (lastApplied.current.key === key) return;
+      lastApplied.current.key = key;
+      map.setView([forcePoint.lat, forcePoint.lng], newZoom, {
+        animate: true,
+      });
+      return;
+    }
+    const key = `view:${center[0]},${center[1]},${zoom}`;
+    if (lastApplied.current.key === key) return;
+    lastApplied.current.key = key;
     map.setView(center, zoom, { animate: false });
-  }, [center, zoom, map]);
+  }, [center, zoom, forcePoint, map]);
 
   return null;
 }
