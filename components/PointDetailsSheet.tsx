@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { Drawer } from "vaul";
 import type { PublicPoint, PublicCategory, CategoryId } from "@/lib/types";
 import PointDetails from "./PointDetails";
+
+const SNAP_POINTS: (number | string)[] = [0.4, 0.92];
 
 type Props = {
   point: PublicPoint | null;
@@ -15,19 +18,32 @@ type Props = {
  * Закрывается свайпом вниз ниже peek (vaul вызывает onOpenChange(false)).
  * На десктопе скрыт через md:hidden (overlay и content) — vaul не рендерит
  * Portal-элементы когда open=false.
+ *
+ * Vaul 1.1.x требует controlled snap (activeSnapPoint + setActiveSnapPoint)
+ * когда заданы snapPoints — иначе sheet остаётся за пределами viewport.
  */
 export default function PointDetailsSheet({
   point,
   categoryById,
   onClose,
 }: Props) {
+  const [activeSnap, setActiveSnap] = useState<number | string | null>(
+    SNAP_POINTS[0],
+  );
+
   return (
     <Drawer.Root
       open={point !== null}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) {
+          onClose();
+          // Сбрасываем snap при закрытии — следующее открытие начнётся с peek
+          setActiveSnap(SNAP_POINTS[0]);
+        }
       }}
-      snapPoints={[0.4, 0.92]}
+      snapPoints={SNAP_POINTS}
+      activeSnapPoint={activeSnap}
+      setActiveSnapPoint={setActiveSnap}
     >
       <Drawer.Portal>
         <Drawer.Overlay className="md:hidden fixed inset-0 bg-black/20 z-[1001]" />
